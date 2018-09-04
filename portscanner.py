@@ -2,50 +2,50 @@
 import socket
 from select import select
 from time import time
+import asyncio
 
 class Scanner:
 
     def __init__(self, host):
         self.host = host
 
-    # TODO make nonblocking by yielding at each iteration in while loop
-    def scan(self, ports, timeout=10):
+    # TODO maybe there is a way to get port, a socket is trying to connect to and if there is, it won't be neccessary to store ports in dict
+    async def scan(self, ports):
         sockets = {}
         for port in ports:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM | socket.SOCK_NONBLOCK)
             sockets[sock] = port
             sock.connect_ex((self.host, port))
-        time_point = time() + timeout
-        while sockets and time() < time_point:
+        while sockets:
+            await asyncio.sleep(0)
             _, done, _ = select([],sockets.keys(),[],0)
             for sock in done:
                 port = sockets[sock]
                 del sockets[sock]
                 yield port, sock.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR) == 0
+        # I've found out that sockets will close implicitly, but don't know what about async functions
 
-    def open_ports(self, ports):
-        for port, is_open in self.scan(ports):
+    async def open_ports(self, ports):
+        async for port, is_open in self.scan(ports):
             if is_open:
                 yield port
-        # return map(operator.itemgetter(0), filter(operator.itemgetter(1), ports))
+
+async def main():
+    scanner = Scanner('scanme.nmap.org')
+    async for port in scanner.open_ports(range(300)):
+        print(port)
 
 if __name__ == '__main__':
-    scanner = Scanner('scanme.nmap.org')
-    for port in scanner.open_ports(range(300)):
-        print(port)
-    # for port, is_open in scanner.scan(range(1024), 3):
-    #     if is_open:
-    #         print('[+]', port)
-    #     else:
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(main())
+    # print('=============')
+    # for port in range(30):
+    #     s = socket.socket()
+    #     try:
+    #         s.connect(('scanme.nmap.org', port))
+    #     except ConnectionRefusedError:
     #         print('[-]', port)
-# print('=============')
-# for port in range(30):
-#     s = socket.socket()
-#     try:
-#         s.connect(('scanme.nmap.org', port))
-#     except ConnectionRefusedError:
-#         print('[-]', port)
-#     else:
-#         print('[+]', port)
-#     finally:
-#         s.close()
+    #     else:
+    #         print('[+]', port)
+    #     finally:
+    #         s.close()
